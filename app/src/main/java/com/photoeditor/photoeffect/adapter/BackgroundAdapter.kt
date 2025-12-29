@@ -3,36 +3,28 @@ package com.photoeditor.photoeffect.adapter
 import android.content.Context
 import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
-import android.widget.LinearLayout
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.photoeditor.photoeffect.R
+import com.photoeditor.photoeffect.databinding.ItemFrameBinding // Ensure this matches your XML file name
 
 class BackgroundAdapter(
-    context: Context,
-    bgClickListener: OnBGClickListener
+    private val mContext: Context,
+    private val bgListener: OnBGClickListener
 ) : RecyclerView.Adapter<BackgroundAdapter.BackgroundHolder>() {
 
-
-    var mImages: Array<String>
-    var mContext = context
-    var bgListener: OnBGClickListener = bgClickListener
+    private var mImages: Array<String> = mContext.assets.list("background") ?: arrayOf()
     var selectedindex = 0
-
-    init {
-        mImages = mContext.assets.list("background") as Array<String>
-    }
 
     interface OnBGClickListener {
         fun onBGClick(drawable: Drawable)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BackgroundHolder {
-        var view = LayoutInflater.from(parent.context).inflate(R.layout.item_frame, parent, false)
-
-        return BackgroundHolder(view)
+        // Using View Binding to inflate the layout
+        val binding = ItemFrameBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+        return BackgroundHolder(binding)
     }
 
     override fun getItemCount(): Int {
@@ -40,30 +32,34 @@ class BackgroundAdapter(
     }
 
     override fun onBindViewHolder(holder: BackgroundHolder, position: Int) {
+        val imageName = mImages[position]
 
-        var inputStream = mContext.assets.open("background/" + mImages[position])
-        var drawable = Drawable.createFromStream(inputStream, null)
-        holder.img_frame.setImageDrawable(drawable)
+        // Logic remains exactly the same: Load from assets
+        val inputStream = mContext.assets.open("background/$imageName")
+        val drawable = Drawable.createFromStream(inputStream, null)
 
+        // Accessing views through binding
+        holder.binding.imgFrame.setImageDrawable(drawable)
+
+        // Highlight logic
         if (selectedindex == position) {
-            holder.ll_itemframe.setBackgroundColor(mContext.resources.getColor(R.color.colorAccent))
+            holder.binding.llItemframe.setBackgroundColor(
+                ContextCompat.getColor(mContext, R.color.colorAccent)
+            )
         } else {
-            holder.ll_itemframe.setBackgroundColor(mContext.resources.getColor(R.color.transparent))
+            holder.binding.llItemframe.setBackgroundColor(
+                ContextCompat.getColor(mContext, R.color.transparent)
+            )
         }
 
-        holder.img_frame.setOnClickListener(object : View.OnClickListener {
-            override fun onClick(v: View?) {
-                selectedindex = position
-
-                bgListener.onBGClick(drawable)
-                notifyDataSetChanged()
-            }
-
-        })
+        // Click logic
+        holder.binding.imgFrame.setOnClickListener {
+            selectedindex = position
+            drawable?.let { bgListener.onBGClick(it) }
+            notifyDataSetChanged()
+        }
     }
 
-    class BackgroundHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        var img_frame: ImageView = itemView.findViewById(R.id.img_frame)
-        var ll_itemframe: LinearLayout = itemView.findViewById(R.id.ll_itemframe)
-    }
+    // ViewHolder updated to use Binding
+    class BackgroundHolder(val binding: ItemFrameBinding) : RecyclerView.ViewHolder(binding.root)
 }

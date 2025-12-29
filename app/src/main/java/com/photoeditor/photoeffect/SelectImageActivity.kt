@@ -2,124 +2,129 @@ package com.photoeditor.photoeffect
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.SystemClock
-import android.view.View
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.photoeditor.photoeffect.adapter.SelectedPhotoAdapter
+import com.photoeditor.photoeffect.databinding.ActivitySelectImageBinding
 import com.photoeditor.photoeffect.fragments.GalleryAlbumFragment
 import com.photoeditor.photoeffect.fragments.GalleryAlbumImageFragment
-import kotlinx.android.synthetic.main.activity_select_image.*
-import java.io.File
-import java.lang.Exception
 import java.util.ArrayList
 
-class SelectImageActivity : AppCompatActivity(), GalleryAlbumImageFragment.OnSelectImageListener,
+class SelectImageActivity : AppCompatActivity(),
+    GalleryAlbumImageFragment.OnSelectImageListener,
     SelectedPhotoAdapter.OnDeleteButtonClickListener {
 
-
-    override fun onDeleteButtonClick(str: String) {
-
-        mSelectedImages.remove(str)
-        mSelectedPhotoAdapter.notifyDataSetChanged()
-        val textView = text_imgcount
-        val str2 = "Select upto 10 photo(s)"
-        val sb = StringBuilder()
-        sb.append("(")
-        sb.append(this.mSelectedImages.size)
-        sb.append(")")
-        textView.setText(str2 + sb.toString())
-    }
+    // 1. Declare the binding variable
+    private lateinit var binding: ActivitySelectImageBinding
 
     private val mSelectedImages = ArrayList<String>()
-    private var maxIamgeCount = 10
+    private var maxImageCount = 10
     private lateinit var mSelectedPhotoAdapter: SelectedPhotoAdapter
     private var mLastClickTime: Long = 0
-    fun checkClick() {
+
+    // Improved checkClick to return a Boolean for easier use in listeners
+    private fun isClickValid(): Boolean {
         if (SystemClock.elapsedRealtime() - mLastClickTime < 1000) {
-            return
+            return false
         }
         mLastClickTime = SystemClock.elapsedRealtime()
+        return true
     }
 
+    /**
+     * SelectedPhotoAdapter.OnDeleteButtonClickListener implementation
+     */
+    override fun onDeleteButtonClick(str: String) {
+        mSelectedImages.remove(str)
+        updatePhotoCountUI()
+    }
 
+    /**
+     * GalleryAlbumImageFragment.OnSelectImageListener implementation
+     * Note: str is non-nullable to match standard interface signatures
+     */
     override fun onSelectImage(str: String) {
-        if (str != null) {
-            if (this.mSelectedImages.size == this.maxIamgeCount) {
-                Toast.makeText(
-                    this,
-                    String.format("You only need %d photo(s)", maxIamgeCount),
-                    Toast.LENGTH_SHORT
-                )
-                    .show()
-            } else {
-                var uri = Uri.fromFile(File(str))
-
-                this.mSelectedImages.add(str)
-                this.mSelectedPhotoAdapter.notifyDataSetChanged()
-                val textView = text_imgcount
-                val str2 = "Select upto 10 photo(s)"
-                val sb = StringBuilder()
-                sb.append("(")
-                sb.append(this.mSelectedImages.size)
-                sb.append(")")
-                textView.setText(str2 + sb.toString())
-            }
+        if (mSelectedImages.size >= maxImageCount) {
+            Toast.makeText(
+                this,
+                "You only need $maxImageCount photo(s)",
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            mSelectedImages.add(str)
+            updatePhotoCountUI()
         }
+    }
+
+    // Centralized function to update RecyclerView and the count TextView via binding
+    private fun updatePhotoCountUI() {
+        mSelectedPhotoAdapter.notifyDataSetChanged()
+        val countText = "Select upto 10 photo(s) (${mSelectedImages.size})"
+        binding.textImgcount.text = countText
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_select_image)
+
+        // 2. Initialize View Binding
+        binding = ActivitySelectImageBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         mSelectedPhotoAdapter = SelectedPhotoAdapter(mSelectedImages, this)
 
-        list_images.hasFixedSize()
-        list_images.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        list_images.adapter = mSelectedPhotoAdapter
+        // 3. Access views via binding (Safe and type-secure)
+        binding.listImages.apply {
+            setHasFixedSize(true)
+            layoutManager = LinearLayoutManager(this@SelectImageActivity, LinearLayoutManager.HORIZONTAL, false)
+            adapter = mSelectedPhotoAdapter
+        }
 
+        // Load the gallery fragment into the container
+        // Note: FrameLayout ID 'frame_container' is typically used for transactions
         supportFragmentManager.beginTransaction()
-            .replace(R.id.frame_container, GalleryAlbumFragment(this)).commit()
+            .replace(R.id.frame_container, GalleryAlbumFragment())
+            .commit()
 
-        btn_next.setOnClickListener(object : View.OnClickListener {
-            override fun onClick(v: View?) {
-                checkClick()
+        // Setup Next Button Click
+        binding.btnNext.setOnClickListener {
+            if (isClickValid()) {
                 createCollage()
             }
-        })
+        }
     }
 
-    fun createCollage() {
-        if (mSelectedImages.size == 0) {
+    private fun createCollage() {
+        if (mSelectedImages.isEmpty()) {
             Toast.makeText(this, "Please select photo(s)", Toast.LENGTH_SHORT).show()
             return
         }
 
         try {
-            var intent = Intent(this, CollageActivity::class.java)
+            val intent = Intent(this, CollageActivity::class.java)
+            // Passing selection count and the ArrayList of paths
             intent.putExtra("imageCount", mSelectedImages.size)
-            intent.putExtra("selectedImages", mSelectedImages)
+            intent.putStringArrayListExtra("selectedImages", mSelectedImages)
             intent.putExtra("imagesinTemplate", mSelectedImages.size)
 
             startActivityForResult(intent, 111)
-
         } catch (e: Exception) {
             e.printStackTrace()
+            Toast.makeText(this, "Error starting collage", Toast.LENGTH_SHORT).show()
         }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if (resultCode != Activity.RESULT_OK) {
-            return
-        }
+        if (resultCode != Activity.RESULT_OK) return
 
         if (requestCode == 111) {
-            var intent = Intent(this, MainActivity::class.java)
+            // Success: Return to main menu and clear stack
+            val intent = Intent(this, MainActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
             finish()
         }

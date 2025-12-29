@@ -11,17 +11,19 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
-import android.widget.ImageView
 import android.widget.RelativeLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import com.photoeditor.photoeffect.databinding.ActivityShowImageBinding
 import java.io.File
 
 class ShowImageActivity : AppCompatActivity(), View.OnClickListener {
 
+    // 1. Initialize Binding
+    private lateinit var binding: ActivityShowImageBinding
+
     private var image_uri: String? = null
-    private var img_show: ImageView? = null
     private var saved_file: File? = null
     private var density: Float = 0.toFloat()
     internal var D_height: Int = 0
@@ -29,88 +31,85 @@ class ShowImageActivity : AppCompatActivity(), View.OnClickListener {
     private var display: DisplayMetrics? = null
 
     private var mLastClickTime: Long = 0
-    fun checkClick() {
+
+    // Improved click check logic
+    private fun checkClick(): Boolean {
         if (SystemClock.elapsedRealtime() - mLastClickTime < 1000) {
-            return
+            return false
         }
         mLastClickTime = SystemClock.elapsedRealtime()
+        return true
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Fullscreen Setup
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        setContentView(R.layout.activity_show_image)
+
+        // 2. Initialize View Binding
+        binding = ActivityShowImageBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         image_uri = intent.getStringExtra("image_uri")
 
-        saved_file = File(image_uri!!)
-        img_show = findViewById<View>(R.id.img_show) as ImageView
+        if (image_uri != null) {
+            saved_file = File(image_uri!!)
 
-        display = resources.displayMetrics
-        density = resources.displayMetrics.density
-        D_width = display!!.widthPixels
-        D_height = (display!!.heightPixels.toFloat() - density * 150.0f).toInt()
+            // Layout Calculations
+            display = resources.displayMetrics
+            density = resources.displayMetrics.density
+            D_width = display!!.widthPixels
+            D_height = (display!!.heightPixels.toFloat() - density * 150.0f).toInt()
 
-        val layoutParams = RelativeLayout.LayoutParams(D_width, ViewGroup.LayoutParams.WRAP_CONTENT)
-        layoutParams.addRule(RelativeLayout.CENTER_IN_PARENT, RelativeLayout.TRUE)
-        img_show!!.layoutParams = layoutParams
+            val layoutParams = RelativeLayout.LayoutParams(D_width, ViewGroup.LayoutParams.WRAP_CONTENT)
+            layoutParams.addRule(RelativeLayout.CENTER_IN_PARENT, RelativeLayout.TRUE)
 
-        img_show!!.setImageURI(Uri.parse(image_uri))
+            // 3. Access views via binding
+            binding.imgShow.layoutParams = layoutParams
+            binding.imgShow.setImageURI(Uri.parse(image_uri))
+        }
 
-        findViewById<View>(R.id.whatsapp_share).setOnClickListener(this)
-        findViewById<View>(R.id.facebook_share).setOnClickListener(this)
-        findViewById<View>(R.id.instagram_share).setOnClickListener(this)
-        findViewById<View>(R.id.messanger_share).setOnClickListener(this)
-        findViewById<View>(R.id.twitter_share).setOnClickListener(this)
-        findViewById<View>(R.id.share_more).setOnClickListener(this)
-        findViewById<View>(R.id.img_folder).setOnClickListener(this)
-
+        // 4. Set Click Listeners using binding
+        binding.whatsappShare.setOnClickListener(this)
+        binding.facebookShare.setOnClickListener(this)
+        binding.instagramShare.setOnClickListener(this)
+        binding.messangerShare.setOnClickListener(this)
+        binding.twitterShare.setOnClickListener(this)
+        binding.shareMore.setOnClickListener(this)
+        binding.imgFolder.setOnClickListener(this)
     }
 
     override fun onClick(v: View) {
-        when (v.id) {
-            R.id.whatsapp_share -> {
-                checkClick()
-                shareImageSocialApp("com.whatsapp", "Whatsapp")
+        if (!checkClick()) return // Stop multiple rapid clicks
 
-            }
-            R.id.instagram_share -> {
-                checkClick()
-                shareImageSocialApp("com.instagram.android", "Instagram")
-            }
-            R.id.twitter_share -> {
-                checkClick()
-                shareImageSocialApp("com.twitter.android", "Twitter")
-            }
-            R.id.messanger_share -> {
-                checkClick()
-                shareImageSocialApp("com.facebook.orca", "Facebook Messanger")
-            }
+        when (v.id) {
+            R.id.whatsapp_share -> shareImageSocialApp("com.whatsapp", "Whatsapp")
+
+            R.id.instagram_share -> shareImageSocialApp("com.instagram.android", "Instagram")
+
+            R.id.twitter_share -> shareImageSocialApp("com.twitter.android", "Twitter")
+
+            R.id.messanger_share -> shareImageSocialApp("com.facebook.orca", "Facebook Messenger")
+
+            R.id.facebook_share -> shareImageSocialApp("com.facebook.katana", "Facebook")
+
             R.id.share_more -> {
-                checkClick()
-                val share = Intent("android.intent.action.SEND")
+                val share = Intent(Intent.ACTION_SEND)
                 share.type = "image/*"
-                share.putExtra(
-                    "android.intent.extra.STREAM",
-                    FileProvider.getUriForFile(
-                        this@ShowImageActivity,
-                        BuildConfig.APPLICATION_ID + ".provider",
-                        saved_file!!
-                    )
+                val uri = FileProvider.getUriForFile(
+                    this,
+                    "$packageName.provider",
+                    saved_file!!
                 )
+                share.putExtra(Intent.EXTRA_STREAM, uri)
                 share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                //                share.putExtra("android.intent.extra.STREAM", image_uri);
                 startActivity(Intent.createChooser(share, "Share Image"))
-            }
-            R.id.facebook_share -> {
-                checkClick()
-                shareImageSocialApp("com.facebook.katana", "Facebook")
             }
 
             R.id.img_folder -> {
-                checkClick()
-                var intent = Intent(this, MyCreationActivity::class.java)
+                val intent = Intent(this, MyCreationActivity::class.java)
                 startActivity(intent)
                 finish()
             }
@@ -118,36 +117,37 @@ class ShowImageActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     fun shareImageSocialApp(pkg: String, appName: String) {
-        val share = Intent("android.intent.action.SEND")
+        val share = Intent(Intent.ACTION_SEND)
+        share.type = "image/*"
 
-        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        share.putExtra(
-            "android.intent.extra.STREAM",
-            FileProvider.getUriForFile(
-                this@ShowImageActivity,
-                BuildConfig.APPLICATION_ID + ".provider",
+        try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "$packageName.provider",
                 saved_file!!
             )
-        )
-        share.putExtra(Intent.EXTRA_TEXT,getString(R.string.txt_share))
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            share.putExtra(Intent.EXTRA_STREAM, uri)
+            share.putExtra(Intent.EXTRA_TEXT, getString(R.string.txt_share))
 
-        //        share.putExtra("android.intent.extra.STREAM", Uri.fromFile(saved_file));
-
-        share.type = "image/*"
-        if (isPackageInstalled(pkg, this)) {
-            share.setPackage(pkg)
-            startActivity(Intent.createChooser(share, "Share Image"))
-            return
+            if (isPackageInstalled(pkg, this)) {
+                share.setPackage(pkg)
+                startActivity(share) // Choice not needed if package is forced
+                return
+            }
+            Toast.makeText(this, "Please Install $appName", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Sharing failed", Toast.LENGTH_SHORT).show()
         }
-        Toast.makeText(applicationContext, "Please Install $appName", Toast.LENGTH_LONG).show()
     }
 
     private fun isPackageInstalled(packagename: String, context: Context): Boolean {
-        try {
-            context.packageManager.getPackageInfo(packagename, PackageManager.GET_META_DATA)
-            return true
+        return try {
+            context.packageManager.getPackageInfo(packagename, 0)
+            true
         } catch (e: PackageManager.NameNotFoundException) {
-            return false
+            false
         }
     }
 
@@ -156,5 +156,4 @@ class ShowImageActivity : AppCompatActivity(), View.OnClickListener {
         startActivity(intent)
         finish()
     }
-
 }

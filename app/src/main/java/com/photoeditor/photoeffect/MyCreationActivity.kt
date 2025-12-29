@@ -15,7 +15,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import kotlinx.android.synthetic.main.activity_my_creation.*
 import java.io.File
 import java.lang.Long.compare
 import java.util.*
@@ -24,37 +23,42 @@ import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
 import android.widget.RelativeLayout
+import android.widget.Toast
 import com.photoeditor.photoeffect.MainActivity.Companion.isFromSaved
-
+import com.photoeditor.photoeffect.databinding.ActivityMyCreationBinding // Binding Import
 
 class MyCreationActivity : AppCompatActivity() {
 
+    // 1. Declare the binding variable
+    private lateinit var binding: ActivityMyCreationBinding
 
     lateinit var img_path: ArrayList<File_Model>
-
     private var mLastClickTime: Long = 0
-    fun checkClick() {
+
+    // Debounce logic for clicks
+    private fun checkClick(): Boolean {
         if (SystemClock.elapsedRealtime() - mLastClickTime < 1000) {
-            return
+            return false
         }
         mLastClickTime = SystemClock.elapsedRealtime()
+        return true
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_my_creation)
 
-        list_creation.layoutManager = GridLayoutManager(this, 2, GridLayoutManager.VERTICAL, false)
+        // 2. Initialize Binding
+        binding = ActivityMyCreationBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        // 3. Access RecyclerView via binding
+        binding.listCreation.layoutManager = GridLayoutManager(this, 2, GridLayoutManager.VERTICAL, false)
 
         LoadImages().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR)
-        Log.e("Page","My creation")
-
-
+        Log.e("Page", "My creation")
     }
 
     inner class LoadImages : AsyncTask<Void, Void, Void?>() {
-
-
         override fun doInBackground(vararg params: Void?): Void? {
             updateFileList()
             return null
@@ -63,49 +67,58 @@ class MyCreationActivity : AppCompatActivity() {
         override fun onPostExecute(result: Void?) {
             super.onPostExecute(result)
 
-            if (img_path.size == 0) {
-                var builder = AlertDialog.Builder(this@MyCreationActivity)
+            if (!::img_path.isInitialized || img_path.size == 0) {
+                val builder = AlertDialog.Builder(this@MyCreationActivity)
                 builder.setMessage("No Files Found").setCancelable(false)
-                    .setPositiveButton("Ok", object : DialogInterface.OnClickListener {
-                        override fun onClick(dialog: DialogInterface?, which: Int) {
-                            dialog!!.cancel()
-                            onBackPressed()
-                        }
-                    })
-                var alert = builder.create()
-                alert.show()
+                    .setPositiveButton("Ok") { dialog, _ ->
+                        dialog.cancel()
+                        onBackPressed()
+                    }
+                builder.create().show()
                 return
             }
 
-            if (img_path != null) {
-
-                var creationAdapter = CreationAdapter(img_path)
-                list_creation.adapter = creationAdapter
-            }
-
+            // Set adapter via binding
+            val creationAdapter = CreationAdapter(img_path)
+            binding.listCreation.adapter = creationAdapter
         }
-
     }
 
     fun updateFileList() {
-        var path = Environment.getExternalStorageDirectory().toString() + "/ArtisticEditor"
-        val directory = File(path)
-        val files = directory.listFiles()
-
         img_path = ArrayList()
 
-        var fileDateCmp = Comparator<File> { f1, f2 ->
-            compare(f2.lastModified(), f1.lastModified())
+        // 1. Check the App-Specific directory (where saveBitmap currently saves)
+        val appSpecificFolder = getExternalFilesDir(Environment.DIRECTORY_PICTURES)?.let {
+            File(it, "ArtisticEditor")
         }
 
-        if (files != null) {
-            Arrays.sort(files, fileDateCmp)
+        // 2. Check the Legacy/Public directory (for older files)
+        val publicFolder = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "ArtisticEditor")
 
-            for (i in 0 until files.size) {
-                var file_model = File_Model()
-                file_model.file_path = files[i].absolutePath
-                file_model.file_title = files[i].name
-                img_path.add(file_model)
+        val allFiles = ArrayList<File>()
+
+        // Add files from app-specific folder
+        appSpecificFolder?.listFiles()?.let { allFiles.addAll(it) }
+
+        // Add files from public folder if it exists
+        if (publicFolder.exists()) {
+            publicFolder.listFiles()?.let { allFiles.addAll(it) }
+        }
+
+        // Sort by Date (Last Modified)
+        val fileDateCmp = Comparator<File> { f1, f2 ->
+            f2.lastModified().compareTo(f1.lastModified())
+        }
+
+        Collections.sort(allFiles, fileDateCmp)
+
+        for (file in allFiles) {
+            if (file.extension.lowercase() in listOf("jpg", "jpeg", "png")) {
+                val fileModel = File_Model().apply {
+                    file_path = file.absolutePath
+                    file_title = file.name
+                }
+                img_path.add(fileModel)
             }
         }
     }
@@ -115,77 +128,87 @@ class MyCreationActivity : AppCompatActivity() {
         lateinit var file_title: String
     }
 
-    inner class CreationAdapter(imgPath: ArrayList<File_Model>) :
+    inner class CreationAdapter(private val paths: ArrayList<File_Model>) :
         RecyclerView.Adapter<CreationAdapter.CreationHolder>() {
 
-        var paths = imgPath
-
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): CreationHolder {
-            var view = LayoutInflater.from(this@MyCreationActivity)
+            val view = LayoutInflater.from(this@MyCreationActivity)
                 .inflate(R.layout.item_creation, parent, false)
-
-            isFromSaved = false
             return CreationHolder(view)
         }
 
-        override fun getItemCount(): Int {
-            return paths.size
-        }
+        override fun getItemCount(): Int = paths.size
 
         override fun onBindViewHolder(holder: CreationHolder, position: Int) {
+            // Use a local reference to the data to avoid issues during re-binding
+            val currentPath = paths[holder.adapterPosition]
 
-            val dm = DisplayMetrics()
-            windowManager.defaultDisplay.getMetrics(dm)
+            val dm = resources.displayMetrics
             val width = dm.widthPixels
-            val height = dm.heightPixels
 
             holder.img_creation.layoutParams = RelativeLayout.LayoutParams(width / 2, width / 2)
 
-            holder.img_creation.setImageURI(Uri.parse(paths[position].file_path))
-            holder.txt_title.setText(paths[position].file_title)
-            holder.img_dlt.setOnClickListener(object : View.OnClickListener {
-                override fun onClick(v: View?) {
+            // Loading images directly from file path
+            holder.img_creation.setImageURI(Uri.fromFile(File(currentPath.file_path)))
+            holder.txt_title.text = currentPath.file_title
 
-                    checkClick()
+            // Delete logic
+            holder.img_dlt.setOnClickListener {
+                if (!checkClick()) return@setOnClickListener
 
-                    var builder = AlertDialog.Builder(this@MyCreationActivity)
-                    builder.setMessage("Are you sure you want to delete?")
-                        .setPositiveButton("Yes", object : DialogInterface.OnClickListener {
-                            override fun onClick(dialog: DialogInterface?, which: Int) {
-                                var filepath = paths[position].file_path
-                                if (File(filepath).delete()) {
-                                    paths.removeAt(position)
-                                    notifyDataSetChanged()
-                                }
-                                dialog!!.dismiss()
+                // IMPORTANT: Get the most up-to-date position from the ViewHolder
+                val currentPos = holder.adapterPosition
+
+                // Check for NO_POSITION to avoid crashes during animations
+                if (currentPos == RecyclerView.NO_POSITION) return@setOnClickListener
+
+                AlertDialog.Builder(this@MyCreationActivity)
+                    .setTitle("Delete Creation")
+                    .setMessage("Are you sure you want to delete this image?")
+                    .setPositiveButton("Yes") { dialog, _ ->
+                        val file = File(paths[currentPos].file_path)
+
+                        if (file.exists() && file.delete()) {
+                            // 1. Remove from Data Source
+                            paths.removeAt(currentPos)
+
+                            // 2. Notify specific item removed (gives a nice animation)
+                            notifyItemRemoved(currentPos)
+
+                            // 3. Notify the range change so subsequent positions are recalculated
+                            notifyItemRangeChanged(currentPos, paths.size)
+
+                            // 4. Handle empty state if last item deleted
+                            if (paths.isEmpty()) {
+                                // Show the "No Files Found" dialog by re-running the check
+                                LoadImages().execute()
                             }
-                        })
-                        .setNegativeButton("No", object : DialogInterface.OnClickListener {
-                            override fun onClick(dialog: DialogInterface?, which: Int) {
-                                dialog!!.dismiss()
-                            }
-                        }).show()
-                }
+                        } else {
+                            Toast.makeText(this@MyCreationActivity, "Failed to delete file", Toast.LENGTH_SHORT).show()
+                        }
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton("No") { dialog, _ -> dialog.dismiss() }
+                    .show()
+            }
 
-            })
+            // View logic
+            holder.img_creation.setOnClickListener {
+                if (!checkClick()) return@setOnClickListener
+                val currentPos = holder.adapterPosition
+                if (currentPos == RecyclerView.NO_POSITION) return@setOnClickListener
 
-            holder.img_creation.setOnClickListener(object : View.OnClickListener {
-                override fun onClick(v: View?) {
-
-                    checkClick()
-
-                    val intent = Intent(this@MyCreationActivity, ShowImageActivity::class.java)
-                    intent.putExtra("image_uri", paths[position].file_path)
-                    startActivity(intent)
-                    finish()
-                }
-            })
+                val intent = Intent(this@MyCreationActivity, ShowImageActivity::class.java)
+                intent.putExtra("image_uri", paths[currentPos].file_path)
+                startActivity(intent)
+                finish()
+            }
         }
 
         inner class CreationHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-            var img_creation = itemView.findViewById<ImageView>(R.id.img_creation)
-            var img_dlt = itemView.findViewById<ImageView>(R.id.img_dlt)
-            var txt_title = itemView.findViewById<TextView>(R.id.txt_title)
+            val img_creation: ImageView = itemView.findViewById(R.id.img_creation)
+            val img_dlt: ImageView = itemView.findViewById(R.id.img_dlt)
+            val txt_title: TextView = itemView.findViewById(R.id.txt_title)
         }
     }
 }

@@ -5,43 +5,41 @@ import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
-import android.widget.LinearLayout
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.photoeditor.photoeffect.R
+import com.photoeditor.photoeffect.databinding.ItemColorBinding
 import java.lang.Exception
 
-class StickerAdapter(context: Context, position: Int) :
+class StickerAdapter(private val mContext: Context, private val categoryPosition: Int) :
     RecyclerView.Adapter<StickerAdapter.StickerHolder>() {
-    var mContext: Context = context
-    lateinit var images: Array<String>
-    var position: Int = position
-    var names: Array<String> = arrayOf("emoji", "cat", "dog", "chicken", "texts", "tusk")
-    var selectedindex = 0
+
+    private var images: Array<String>
+    private val names: Array<String> = arrayOf("emoji", "cat", "dog", "chicken", "texts", "tusk")
+    private var selectedindex = 0
+    private var stickerListener: StickerListener? = null
 
     init {
-        //        images = mContext.assets.list("") as Array<String>
-
-        when {
-            this.position == 0 -> images =
-                mContext.assets.list(names[this.position]) as Array<String>
-            this.position == 1 -> images =
-                mContext.assets.list(names[this.position]) as Array<String>
-            this.position == 2 -> images =
-                mContext.assets.list(names[this.position]) as Array<String>
-            this.position == 3 -> images =
-                mContext.assets.list(names[this.position]) as Array<String>
-            this.position == 4 -> images =
-                mContext.assets.list(names[this.position]) as Array<String>
-            this.position == 5 -> images =
-                mContext.assets.list(names[this.position]) as Array<String>
+        // Maintain the logic: Select the folder based on the passed position
+        images = if (categoryPosition in names.indices) {
+            mContext.assets.list(names[categoryPosition]) ?: arrayOf()
+        } else {
+            arrayOf()
         }
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): StickerHolder {
+    interface StickerListener {
+        fun onStickerClick(view: View, drawable: Drawable)
+    }
 
-        var view = LayoutInflater.from(mContext).inflate(R.layout.item_color, parent, false)
-        return StickerHolder(view)
+    fun setOnStickerClick(stickerlistener: StickerListener) {
+        this.stickerListener = stickerlistener
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): StickerHolder {
+        // Use View Binding to inflate the layout
+        val binding = ItemColorBinding.inflate(LayoutInflater.from(mContext), parent, false)
+        return StickerHolder(binding)
     }
 
     override fun getItemCount(): Int {
@@ -49,47 +47,44 @@ class StickerAdapter(context: Context, position: Int) :
     }
 
     override fun onBindViewHolder(holder: StickerHolder, position: Int) {
-        var inputStream = mContext.assets.open(names[this.position] + "/" + images.get(position))
-        var drawable = Drawable.createFromStream(inputStream, null)
+        try {
+            val path = names[categoryPosition] + "/" + images[position]
+            val inputStream = mContext.assets.open(path)
+            val drawable = Drawable.createFromStream(inputStream, null)
 
-        if (selectedindex == position) {
-            holder.ll_color.setBackgroundColor(mContext.resources.getColor(R.color.colorAccent))
-        } else {
-            holder.ll_color.setBackgroundColor(mContext.resources.getColor(R.color.transparent))
-        }
+            // Access views through binding
+            holder.binding.imgColor.setImageDrawable(drawable)
 
-        holder.img_color.setImageDrawable(drawable)
-        holder.img_color.setOnClickListener(object : View.OnClickListener {
-            override fun onClick(v: View?) {
+            // Selection Logic
+            if (selectedindex == position) {
+                holder.binding.llColor.setBackgroundColor(
+                    ContextCompat.getColor(mContext, R.color.colorAccent)
+                )
+            } else {
+                holder.binding.llColor.setBackgroundColor(
+                    ContextCompat.getColor(mContext, R.color.transparent)
+                )
+            }
+
+            // Click Logic
+            holder.binding.imgColor.setOnClickListener { view ->
                 selectedindex = position
                 try {
-                    stickerListener.onStickerClick(v!!, drawable)
-                    notifyDataSetChanged()
+                    drawable?.let {
+                        stickerListener?.onStickerClick(view, it)
+                    }
                 } catch (e: Exception) {
-
+                    e.printStackTrace()
                 }
                 notifyDataSetChanged()
             }
-        })
-    }
 
-    inner class StickerHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        var img_color: ImageView
-        var ll_color: LinearLayout
-
-        init {
-            img_color = itemView.findViewById(R.id.img_color)
-            ll_color = itemView.findViewById(R.id.ll_color)
+            inputStream.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
-    lateinit var stickerListener: StickerListener
-
-    fun setOnStickerClick(stickerlistener: StickerListener) {
-        this.stickerListener = stickerlistener
-    }
-
-    interface StickerListener {
-        fun onStickerClick(view: View, drawable: Drawable)
-    }
+    // ViewHolder holds the binding object
+    class StickerHolder(val binding: ItemColorBinding) : RecyclerView.ViewHolder(binding.root)
 }

@@ -28,6 +28,8 @@
         <activity
             android:name="com.photoeditor.photoeffect.SplashActivity"
             android:screenOrientation="portrait"
+            android:exported="true"
+
             android:theme="@style/SplashTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

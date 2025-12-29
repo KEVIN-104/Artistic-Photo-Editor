@@ -3,7 +3,6 @@ package com.photoeditor.photoeffect
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import com.facebook.ads.AudienceNetworkAds
 import com.google.android.gms.ads.MobileAds
 
 class SplashActivity : AppCompatActivity() {
@@ -17,8 +16,7 @@ class SplashActivity : AppCompatActivity() {
         setContentView(R.layout.activity_splash)
 
         //facebook Ads initialization
-        AudienceNetworkAds.isInAdsProcess(this)
-        AudienceNetworkAds.initialize(this)
+
 
         //google Ads initialization
         MobileAds.initialize(this){}
